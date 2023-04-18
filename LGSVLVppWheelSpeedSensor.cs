@@ -29,7 +29,9 @@ namespace Simulator.Sensors
     {
         public void Register(IBridgePlugin plugin)
         {
-            if (plugin?.GetBridgeNameAttribute()?.Name == "ROS" || plugin?.GetBridgeNameAttribute()?.Type == "ROS2")
+            if (plugin?.GetBridgeNameAttribute()?.Name == "ROS" || plugin?.GetBridgeNameAttribute()?.Type == "ROS2" ||
+            plugin?.GetBridgeNameAttribute()?.Type == "ROS2_Bridge_GAIA"
+            )
             {
                 plugin.Factory.RegPublisher(plugin,
                     (LGSVLVppWheelSpeedData data) => new Simulator.Bridge.Data.Lgsvl.BoundingBox2D()
@@ -48,6 +50,7 @@ namespace Simulator.Sensors
     public class LGSVLVppWheelSpeedSensor : SensorBase
     {
         private VehicleVPPControllerInput VPP;
+        private VehicleSMI NonVPP_Alt = null;
         private BridgeInstance Bridge;
         private Publisher<LGSVLVppWheelSpeedData> Publish;
 
@@ -62,6 +65,10 @@ namespace Simulator.Sensors
             if (VPP == null)
             {
                 Debug.LogWarning("Could not find VehicleVPPControllerInput.");
+                NonVPP_Alt = GetComponentInParent<VehicleSMI>();
+                if (NonVPP_Alt == null){
+                    Debug.LogWarning("Could not find supported vehicle dynamics model (VPP/VehicleSMI).");
+                }
             }
         }
 
@@ -80,10 +87,18 @@ namespace Simulator.Sensors
 
         private void FixedUpdate()
         {
-            FLWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(0, VehicleBase.WheelPos.Left));
-            FRWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(0, VehicleBase.WheelPos.Right));
-            RLWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(1, VehicleBase.WheelPos.Left));
-            RRWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(1, VehicleBase.WheelPos.Right));
+            if (VPP == null)
+            {
+                FLWheelSpeed = NonVPP_Alt.GetWheelAngularVelocity(0);
+                FRWheelSpeed = NonVPP_Alt.GetWheelAngularVelocity(1);
+                RLWheelSpeed = NonVPP_Alt.GetWheelAngularVelocity(2);
+                RRWheelSpeed = NonVPP_Alt.GetWheelAngularVelocity(3);
+            } else {
+                FLWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(0, VehicleBase.WheelPos.Left));
+                FRWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(0, VehicleBase.WheelPos.Right));
+                RLWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(1, VehicleBase.WheelPos.Left));
+                RRWheelSpeed = VPP.GetWheelAngularVelocity(VPP.GetWheelIndex(1, VehicleBase.WheelPos.Right));
+            }
 
             if (Bridge?.Status == Status.Connected && Publish != null)
             {
@@ -99,7 +114,9 @@ namespace Simulator.Sensors
 
         public override void OnBridgeSetup(BridgeInstance bridge)
         {
-            if (bridge?.Plugin?.GetBridgeNameAttribute()?.Type == "ROS2")
+            if (bridge?.Plugin?.GetBridgeNameAttribute()?.Type == "ROS2" ||
+                bridge?.Plugin?.GetBridgeNameAttribute()?.Type == "ROS2_Bridge_GAIA"
+            )
             {
                 Bridge = bridge;
                 Publish = Bridge.AddPublisher<LGSVLVppWheelSpeedData>(Topic);
